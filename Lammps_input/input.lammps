@@ -1,0 +1,50 @@
+
+variable i equal 6.0
+# Set variable t equal to i*100
+variable t equal ${i}*100
+
+units           metal
+dimension	    3
+boundary        p p p
+atom_style      atomic
+
+# 2) SYSTEM_DEFINITION
+# Read data of the structure
+read_data ./../../ZIF62_glass.data
+## Create random Li atoms
+create_atoms 	5 random 10 344567 NULL overlap 2.8 maxtry 2000
+
+# 1) INITIALISATION
+plugin 		load 	/opt/anaconda3/envs/deepmd/lib/libdeepmd_lmp.so
+
+# Use DeepMD
+pair_style deepmd ../../ZIFsol.pb
+pair_coeff      * * C H N Zn Li
+
+thermo 1000
+timestep 0.0005
+
+group Lithium type 5
+
+min_style cg
+minimize 1e-8 1e-8 10000 10000
+# NPT to relax cell.
+velocity all create $t 556677 dist gaussian
+fix 1 all npt temp $t $t 0.1 iso 0 0 0.1
+run 10000
+unfix 1
+# NVT simulation.
+fix 2 all nvt temp $t $t 0.1 drag 1
+
+# MSD.
+compute 1 Lithium msd
+variable msd equal c_1[4]
+variable step1 equal (step-10000)*0.0005
+fix log Lithium print 1000 "${step1} ${msd}" file result_msd_${t}
+dump 1 all custom 5000 dump_msd_${t} id type x y z 
+dump_modify 1 first yes
+run 2000000
+unfix 2
+undump 1
+
+clear
